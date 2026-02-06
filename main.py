@@ -6,7 +6,7 @@ import argparse
 import subprocess
 from synoacl import Acl, Ace
 
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.DEBUG)
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def parse_policy(policy_path):
@@ -19,17 +19,19 @@ def parse_policy(policy_path):
 
 def process_project(project_path, rules):
     try:
-        for entry in os.scandir(project_path):
-            if not entry.is_dir() or entry.name == "@eaDir":
+        for result in os.scandir(project_path):
+            if not result.is_dir() or result.name == "@eaDir":
                 continue
+            logger.debug(f"{result.name}: evaluating...")
             for rule in rules:
                 pattern = rule.get("pattern")
                 logger.debug(f"pattern: {pattern}")
                 config = rule.get("ensure_acl")
                 if not pattern or not config:
                     continue
-                if re.search(pattern, entry.name, re.IGNORECASE):
-                    target_acl = Acl(entry.path)
+                if re.search(pattern, result.name, re.IGNORECASE):
+                    logger.info(f"[rule \"{rule.get('name')}\"] matches on: {result.name}")
+                    target_acl = Acl(result.path)
                     for subject in config['objects']:
                         target_ace = Ace(
                             principal_type=config.get('principal_type', 'group'),
@@ -40,7 +42,7 @@ def process_project(project_path, rules):
                         )
                         target_acl.sync_ace(target_ace)
                 else:
-                    logger.info(f"no match for pattern {pattern} in entry {entry.name}")
+                    logger.debug(f"[rule \"{rule.get('name')}\"] no match for pattern {pattern} on: {result.name}")
     except OSError as e:
         logger.error(f"Could not scan project directory {project_path}: {e}")
 
@@ -62,7 +64,7 @@ def main():
         if not marker_name:
             continue
         try:
-            logger.info(f"xScanning {args.root} for marker: {marker_name}")
+            logger.info(f"scanning {args.root} for marker: {marker_name}")
             markers = subprocess.check_output(
                 ["find", args.root, "-name", marker_name], 
                 text=True
