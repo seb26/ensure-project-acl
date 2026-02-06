@@ -40,7 +40,12 @@ def process_project(project_path, rules):
                             rights=config['rights'],
                             apply_to=config['apply_to']
                         )
-                        target_acl.sync_ace(target_ace)
+                        changed = target_acl.sync_ace(target_ace)
+                        if changed:
+                            logger.info(f"[rule \"{rule.get('name')}\"] applied change OK to {result.path}")
+                        else:
+                            logger.info(f"[rule \"{rule.get('name')}\"] no change for {result.path}")
+
                 else:
                     logger.debug(f"[rule \"{rule.get('name')}\"] no match for pattern {pattern} on: {result.name}")
     except OSError as e:

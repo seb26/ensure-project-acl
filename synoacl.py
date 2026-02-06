@@ -119,7 +119,9 @@ class Acl:
             all_explicit = [e for e in self.entries if e.name == target_ace.name and e.level == 0]
         primary = all_explicit[0]
         if primary.perms != target_ace.perms or primary.inherit != target_ace.inherit or primary.access != target_ace.access:
-            return self._replace_ace(primary.index, target_ace)
+            run = self._replace_ace(primary.index, target_ace)
+            if run.returncode == 0:
+                return True
         else:
             logger.debug(f"no changes needed for {self.path} -> {target_ace.to_syno_str()}")
         return False
