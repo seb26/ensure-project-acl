@@ -93,47 +93,81 @@ class Acl:
         try:
             return subprocess.run(cmd, capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError as e:
-            logger.error(f"synoacltool error: {e.stderr.strip()} (cmd: {' '.join(cmd)})")
+            error_msg = e.stderr.strip() if e.stderr else f"exit code {e.returncode}"
+            logger.error(f"synoacltool error: {error_msg} (cmd: {' '.join(cmd)})")
+            return None
+        except Exception as e:
+            logger.error(f"unexpected synoacltool error: {type(e).__name__}: {e}")
             return None
 
     def load(self):
         result = self._synoacltool(['-get', self.path])
-        if not result: return False
+        if not result:
+            logger.error(f"failed to load ACL for {self.path}")
+            return False
         self.entries = []
         for line in result.stdout.splitlines():
             match = self.ace_pattern.match(line)
             if match:
                 idx, p_type, name, access, perms, inherit, level = match.groups()
                 self.entries.append(Ace(p_type, name, access, perms, inherit, level, idx))
+            else:
+                # Log unexpected output lines for debugging
+                if line.strip():
+                    logger.debug(f"unparseable ACL line: {line}")
         return True
 
-    def sync_ace(self, target_ace):
-        all_explicit = [e for e in self.entries if e.name == target_ace.name 
-                        and e.principal_type == target_ace.principal_type and e.level == 0]
-        if not all_explicit:
-            return self._add_ace(target_ace)
-        if len(all_explicit) > 1:
-            for extra in all_explicit[1:]:
-                self._del_ace(extra.index)
-            self.load()
-            all_explicit = [e for e in self.entries if e.name == target_ace.name and e.level == 0]
-        primary = all_explicit[0]
-        if primary.perms != target_ace.perms or primary.inherit != target_ace.inherit or primary.access != target_ace.access:
-            run = self._replace_ace(primary.index, target_ace)
-            if run.returncode == 0:
-                return True
-        else:
-            logger.debug(f"no changes needed for {self.path} -> {target_ace.to_syno_str()}")
-        return False
+    def sync_ace(self, target_ace) -> bool:
+        """Sync ACE, logging failures without crashing."""
+        try:
+            all_explicit = [e for e in self.entries if e.name == target_ace.name 
+                            and e.principal_type == target_ace.principal_type and e.level == 0]
+            if not all_explicit:
+                return self._add_ace(target_ace)
+            
+            if len(all_explicit) > 1:
+                for extra in all_explicit[1:]:
+                    if not self._del_ace(extra.index):
+                        logger.warning(f"failed to delete redundant ACE at index {extra.index} for {self.path}")
+                # Reload after deletions
+                if not self.load():
+                    logger.warning(f"failed to reload ACL after deletion for {self.path}")
+                    return False
+                all_explicit = [e for e in self.entries if e.name == target_ace.name and e.level == 0]
+                if not all_explicit:
+                    logger.warning(f"ACE disappeared after cleanup, re-adding for {self.path}")
+                    return self._add_ace(target_ace)
+            
+            primary = all_explicit[0]
+            if primary.perms != target_ace.perms or primary.inherit != target_ace.inherit or primary.access != target_ace.access:
+                return self._replace_ace(primary.index, target_ace)
+            else:
+                logger.debug(f"no changes needed for {self.path} -> {target_ace.to_syno_str()}")
+                return False
+        except Exception as e:
+            logger.error(f"unexpected error syncing ACE for {self.path}: {type(e).__name__}: {e}")
+            return False
 
-    def _add_ace(self, target_ace):
+    def _add_ace(self, target_ace) -> bool:
         logger.info(f"correction: {self.path} -> add {target_ace.to_syno_str()}")
-        return self._synoacltool(['-add', self.path, target_ace.to_syno_str()]) is not None
+        result = self._synoacltool(['-add', self.path, target_ace.to_syno_str()])
+        if result is None:
+            logger.error(f"failed to add ACE to {self.path}")
+            return False
+        return True
 
-    def _replace_ace(self, index, target_ace):
+    def _replace_ace(self, index: str, target_ace) -> bool:
         logger.info(f"correction: {self.path} -> replace index {index} with {target_ace.to_syno_str()}")
-        return self._synoacltool(['-replace', self.path, str(index), target_ace.to_syno_str()]) is not None
+        result = self._synoacltool(['-replace', self.path, str(index), target_ace.to_syno_str()])
+        if result is None:
+            logger.error(f"failed to replace ACE at index {index} for {self.path}")
+            return False
+        return True
 
-    def _del_ace(self, index):
+    def _del_ace(self, index: str) -> bool:
         logger.info(f"correction: {self.path} -> delete redundant index {index}")
-        return self._synoacltool(['-del', self.path, str(index)]) is not None
+        result = self._synoacltool(['-del', self.path, str(index)])
+        if result is None:
+            logger.error(f"failed to delete ACE at index {index} for {self.path}")
+            return False
+        return True
