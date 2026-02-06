@@ -54,13 +54,21 @@ class Ace:
         return mask
 
     def _build_inherit(self, apply_to):
+        # 1. Map labels to bit characters
         s = ""
         if "All descendants" in apply_to:
             s = "fd"
         else:
             for item in apply_to:
                 s += SYNOLOGY_UI_INHERIT_MAP.get(item, "")
-        return "".join(sorted(set(s))) if s else "-"
+        # 2. Normalize: Remove existing dashes, unique chars only
+        chars = set(s.replace("-", ""))
+        # 3. Build the 4-character string in strict Synology order: f, d, i, n
+        order = "fdin"
+        result = ""
+        for bit in order:
+            result += bit if bit in chars else "-"
+        return result
 
     def __eq__(self, other):
         if not isinstance(other, Ace): return False
@@ -110,10 +118,10 @@ class Acl:
             self.load()
             all_explicit = [e for e in self.entries if e.name == target_ace.name and e.level == 0]
         primary = all_explicit[0]
-        print(f"DEBUG: Current perms: '{primary.perms}' vs Target: '{target_ace.perms}'")
-        print(f"DEBUG: Current inherit: '{primary.inherit}' vs Target: '{target_ace.inherit}'")
         if primary.perms != target_ace.perms or primary.inherit != target_ace.inherit or primary.access != target_ace.access:
             return self._replace_ace(primary.index, target_ace)
+        else:
+            logger.debug(f"no changes needed for {self.path} -> {target_ace.to_syno_str()}")
         return False
 
     def _add_ace(self, target_ace):
