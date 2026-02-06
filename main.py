@@ -6,7 +6,11 @@ import argparse
 import subprocess
 from synoacl import Acl, Ace
 
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(
+    datefmt="%Y-%m-%d %H:%M:%S",
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    level=logging.INFO,
+)
 logger = logging.getLogger(__name__)
 
 def parse_policy(policy_path):
@@ -55,7 +59,10 @@ def main():
     parser = argparse.ArgumentParser(description="Synology ACL Policy Enforcer")
     parser.add_argument("--policy", required=True, help="Path to policy.yaml")
     parser.add_argument("--root", required=True, help="Search root directory (e.g. /volume1/PROJECTS)")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
+    if args.debug:
+        logger.setLevel(logging.DEBUG)  
     if not os.path.isdir(args.root):
         logger.error(f"Search root is not a directory: {args.root}")
         return
