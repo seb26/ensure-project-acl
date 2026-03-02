@@ -178,6 +178,7 @@ def main():
         return
     stats = {
         "projects_found": 0,
+        "projects_failed": 0,
         "directories_matched": 0,
         "directories_failed": 0,
         "rules_applied": 0,
@@ -226,14 +227,16 @@ def main():
     logger.info("=" * 60)
     logger.info("Processing Summary:")
     logger.info(f"  Projects found:         {stats['projects_found']}")
+    logger.info(f"  Projects failed:        {stats['projects_failed']}")
     logger.info(f"  Directories matched:    {stats['directories_matched']}")
     logger.info(f"  Directories failed:     {stats['directories_failed']}")
     logger.info(f"  Rules applied:          {stats['rules_applied']}")
     logger.info(f"  Rules no change needed: {stats['rules_no_change_needed']}")
     logger.info(f"  Rules failed:           {stats['rules_failed']}")
     logger.info("=" * 60)
-    if stats['directories_failed'] > 0 or stats['rules_failed'] > 0:
-        logger.warning("Some operations failed - check logs above for details")
+    failures = stats['projects_failed'] + stats['directories_failed'] + stats['rules_failed']
+    if failures > 0:
+        logger.warning("some operations failed - check logs above for details")
         return 1
     return 0
 
