@@ -14,13 +14,75 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def validate_policy(policy):
+    """Validate policy structure and return list of errors."""
+    errors = []
+    if not isinstance(policy, dict):
+        return ["policy must be a YAML mapping"]
+    schemarules = policy.get("schemarules")
+    if not schemarules:
+        return ["policy must contain 'schemarules' list"]
+    if not isinstance(schemarules, list):
+        return ["'schemarules' must be a list"]
+    for i, schema in enumerate(schemarules, 1):
+        prefix = f"schemarule[{i}]"
+        if not isinstance(schema, dict):
+            errors.append(f"{prefix}: must be a mapping")
+            continue
+        criteria = schema.get("selection_criteria", {})
+        marker_name = criteria.get("marker_file", {}).get("name")
+        if not marker_name:
+            errors.append(f"{prefix}: missing selection_criteria.marker_file.name")
+        rules = schema.get("rules", [])
+        if not isinstance(rules, list):
+            errors.append(f"{prefix}: 'rules' must be a list")
+            continue
+        for j, rule in enumerate(rules, 1):
+            rule_prefix = f"{prefix}.rule[{j}]"
+            if not isinstance(rule, dict):
+                errors.append(f"{rule_prefix}: must be a mapping")
+                continue
+            pattern = rule.get("pattern")
+            if not pattern:
+                errors.append(f"{rule_prefix}: missing 'pattern'")
+            else:
+                try:
+                    re.compile(pattern)
+                except re.error as e:
+                    errors.append(f"{rule_prefix}: invalid regex pattern '{pattern}': {e}")
+            acl_cfg = rule.get("ensure_acl")
+            if not acl_cfg:
+                errors.append(f"{rule_prefix}: missing 'ensure_acl'")
+            elif isinstance(acl_cfg, dict):
+                if not acl_cfg.get("rights"):
+                    errors.append(f"{rule_prefix}: missing 'ensure_acl.rights'")
+                if not acl_cfg.get("apply_to"):
+                    errors.append(f"{rule_prefix}: missing 'ensure_acl.apply_to'")
+                if not acl_cfg.get("objects"):
+                    errors.append(f"{rule_prefix}: missing 'ensure_acl.objects'")
+    return errors
+
 def parse_policy(policy_path):
+    """Load and validate policy file, returning None on failure."""
     try:
         with open(policy_path, "r") as f:
-            return yaml.safe_load(f)
-    except Exception as e:
-        logger.error(f"Failed to load policy file {policy_path}: {e}")
+            policy = yaml.safe_load(f)
+    except FileNotFoundError:
+        logger.error(f"policy file not found: {policy_path}")
         return None
+    except yaml.YAMLError as e:
+        logger.error(f"invalid YAML in policy file {policy_path}: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"failed to load policy file {policy_path}: {e}")
+        return None
+    errors = validate_policy(policy)
+    if errors:
+        logger.error(f"policy validation failed with {len(errors)} error(s):")
+        for err in errors:
+            logger.error(f"  - {err}")
+        return None
+    return policy
 
 def process_project(project_path, rules, stats):
     """Process ACL rules for a project, continuing on errors."""
@@ -108,11 +170,11 @@ def main():
     if args.debug:
         logger.setLevel(logging.DEBUG)
     if not os.path.isdir(args.root):
-        logger.error(f"Search root is not a directory: {args.root}")
+        logger.error(f"search root is not a directory: {args.root}")
         return
     policy = parse_policy(args.policy)
     if not policy:
-        logger.error(f"Cannot proceed without valid policy")
+        logger.error(f"aborting due to policy validation fail")
         return
     stats = {
         "projects_found": 0,
