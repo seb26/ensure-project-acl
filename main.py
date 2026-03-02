@@ -4,8 +4,11 @@ import yaml
 import re
 import argparse
 import subprocess
+import fcntl
 from pathlib import Path
 from synoacl import Acl, Ace
+
+LOCK_FILE_NAME = ".ensure-project-acl.lock"
 
 logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -161,6 +164,43 @@ def apply_rules_to_path(path, name, rules, stats):
             logger.debug(f"[rule \"{rule.get('name')}\"] no match for pattern {pattern} on: {name}")
     return matches
 
+def acquire_lock(root_path):
+    """Acquire exclusive lock, returns (file_handle, lock_path) or (None, None)."""
+    lock_path = os.path.join(root_path, LOCK_FILE_NAME)
+    lock_file = None
+    try:
+        lock_file = open(lock_path, 'w')
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        lock_file.write(f"{os.getpid()}\n")
+        lock_file.flush()
+        logger.info(f"acquired lock: {lock_path}")
+        return lock_file, lock_path
+    except BlockingIOError:
+        logger.error(f"another instance is already running (lock file: {lock_path})")
+        if lock_file:
+            lock_file.close()
+        return None, None
+    except OSError as e:
+        logger.error(f"failed to acquire lock at {lock_path}: {e}")
+        if lock_file:
+            lock_file.close()
+        return None, None
+
+def release_lock(lock_file, lock_path):
+    """Delete lock file, release lock, and close handle."""
+    if not lock_file:
+        return
+    try:
+        os.unlink(lock_path)
+        logger.debug(f"removed lock file: {lock_path}")
+    except OSError as e:
+        logger.warning(f"failed to remove lock file {lock_path}: {e}")
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_UN)
+        lock_file.close()
+    except Exception as e:
+        logger.warning(f"error releasing lock: {e}")
+
 def main():
     parser = argparse.ArgumentParser(description="Synology ACL Policy Enforcer")
     parser.add_argument("--policy", required=True, help="Path to policy.yaml")
@@ -171,11 +211,21 @@ def main():
         logger.setLevel(logging.DEBUG)
     if not os.path.isdir(args.root):
         logger.error(f"search root is not a directory: {args.root}")
-        return
+        return 1
+    lock_file, lock_path = acquire_lock(args.root)
+    if not lock_file:
+        return 1
+    try:
+        return _run_policy(args)
+    finally:
+        release_lock(lock_file, lock_path)
+
+def _run_policy(args):
+    """Main processing logic, called after lock is acquired."""
     policy = parse_policy(args.policy)
     if not policy:
         logger.error(f"aborting due to policy validation fail")
-        return
+        return 1
     stats = {
         "projects_found": 0,
         "projects_failed": 0,
