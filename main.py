@@ -4,7 +4,7 @@ import yaml
 import re
 import argparse
 import fcntl
-from synoacl import Acl, Ace
+from synoacl import Acl, Ace, check_synoacltool
 
 LOCK_FILE_NAME = ".ensure-project-acl.lock"
 EXCLUDED_DIRS = {"@eaDir"}
@@ -221,6 +221,8 @@ def main():
 
 def _run_policy(args):
     """Main processing logic, called after lock is acquired."""
+    if not check_synoacltool():
+        return 1
     policy = parse_policy(args.policy)
     if not policy:
         logger.error(f"aborting due to policy validation fail")

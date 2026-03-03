@@ -2,9 +2,17 @@ import os
 import re
 import stat
 import subprocess
+import shutil
 import logging
 
 logger = logging.getLogger(__name__)
+
+def check_synoacltool():
+    """Verify synoacltool is available, returns True if found."""
+    if shutil.which("synoacltool") is None:
+        logger.error("synoacltool not found in PATH")
+        return False
+    return True
 
 SYNOLOGY_UI_SCHEMA = {
     "Administration": {
