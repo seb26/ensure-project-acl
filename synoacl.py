@@ -14,34 +14,27 @@ def check_synoacltool():
         return False
     return True
 
-SYNOLOGY_UI_SCHEMA = {
-    "Administration": {
-        "Change permissions": "C",
-        "Take ownership": "o"
-    },
-    "Read": {
-        "Traverse folders/Execute files": "x",
-        "List folders/Read data": "r",
-        "Read attributes": "a",
-        "Read extended attributes": "R",
-        "Read permissions": "c"
-    },
-    "Write": {
-        "Create files/Write data": "w",
-        "Create folders/Append data": "p",
-        "Write attributes": "A",
-        "Write extended attributes": "W",
-        "Delete subfolders and files": "D",
-        "Delete": "d"
-    }
+SYNOLOGY_PERMISSION_BITS = {
+    "r": "List folders/Read data",
+    "w": "Create files/Write data",
+    "x": "Traverse folders/Execute files",
+    "p": "Create folders/Append data",
+    "d": "Delete",
+    "D": "Delete subfolders and files",
+    "a": "Read attributes",
+    "A": "Write attributes",
+    "R": "Read extended attributes",
+    "W": "Write extended attributes",
+    "c": "Read permissions",
+    "C": "Change permissions",
+    "o": "Take ownership",
 }
 
-SYNOLOGY_UI_INHERIT_MAP = {
-    "Child files": "f",
-    "Child folders": "d",
-    "Inherit only": "i",
-    "No propagate": "n",
-    "All descendants": "fd"
+SYNOLOGY_INHERIT_BITS = {
+    "f": "Child files",
+    "d": "Child folders",
+    "i": "Inherit only",
+    "n": "No propagate",
 }
 
 class Ace:
@@ -55,30 +48,24 @@ class Ace:
         self.inherit = apply_to if isinstance(apply_to, str) else self._build_inherit(apply_to)
 
     def _build_mask(self, requested):
-        lookup = {label: bit for cat in SYNOLOGY_UI_SCHEMA.values() for label, bit in cat.items()}
-        order = "rwxpdDaARWcCo"
+        """Convert human-readable permission labels to synoacltool permission string."""
         mask = ""
-        for char in order:
-            active_labels = [label for label, bit in lookup.items() if bit == char]
-            mask += char if any(item in requested for item in active_labels) else "-"
+        for bit in "rwxpdDaARWcCo":
+            label = SYNOLOGY_PERMISSION_BITS.get(bit, "")
+            mask += bit if label in requested else "-"
         return mask
 
     def _build_inherit(self, apply_to):
-        # 1. Map labels to bit characters
-        s = ""
+        """Convert human-readable inheritance labels to synoacltool inherit string."""
         if "All descendants" in apply_to:
-            s = "fd"
+            bits = {"f", "d"}
         else:
-            for item in apply_to:
-                s += SYNOLOGY_UI_INHERIT_MAP.get(item, "")
-        # 2. Normalize: Remove existing dashes, unique chars only
-        chars = set(s.replace("-", ""))
-        # 3. Build the 4-character string in strict Synology order: f, d, i, n
-        order = "fdin"
-        result = ""
-        for bit in order:
-            result += bit if bit in chars else "-"
-        return result
+            label_to_bit = {label: bit for bit, label in SYNOLOGY_INHERIT_BITS.items()}
+            bits = {label_to_bit[label] for label in apply_to if label in label_to_bit}
+        mask = ""
+        for bit in "fdin":
+            mask += bit if bit in bits else "-"
+        return mask
 
     def __eq__(self, other):
         if not isinstance(other, Ace): return False
