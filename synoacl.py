@@ -4,6 +4,7 @@ import stat
 import subprocess
 import shutil
 import logging
+from log import NOTICE
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,7 @@ class Acl:
         if result.returncode != 0:
             stdout = result.stdout.strip()
             if result.returncode == 255 and ("Linux mode" in stdout or stdout == ""):
-                logger.info(f"folder {self.path} is in Linux mode - initializing ACL with inheritance")
+                logger.log(NOTICE, f"folder {self.path} is in Linux mode - initializing ACL with inheritance")
                 # Capture POSIX mode before enforce-inherit (which may change it)
                 original_posix_mode = None
                 try:
@@ -146,7 +147,7 @@ class Acl:
                     if match:
                         idx, p_type, name, access, perms, inherit, level = match.groups()
                         self.entries.append(Ace(p_type, name, access, perms, inherit, level, idx))
-                logger.info(f"initialized ACL for {self.path} with {len(self.entries)} inherited entries")
+                logger.log(NOTICE, f"initialized ACL for {self.path} with {len(self.entries)} inherited entries")
                 self.loaded = True
                 return True
             else:
@@ -159,9 +160,15 @@ class Acl:
             if match:
                 idx, p_type, name, access, perms, inherit, level = match.groups()
                 self.entries.append(Ace(p_type, name, access, perms, inherit, level, idx))
-            else:
-                if line.strip():
-                    logger.debug(f"unparseable ACL line: {line}")
+            elif line.strip():
+                # Skip known header lines from synoacltool output
+                stripped = line.strip()
+                if (stripped.startswith("ACL version:") or
+                    stripped.startswith("Archive:") or
+                    stripped.startswith("Owner:") or
+                    stripped == "---------------------"):
+                    continue
+                logger.debug(f"unparseable ACL line: {line}")
         self.loaded = True
         return True
 
@@ -204,7 +211,7 @@ class Acl:
         result = self._synoacltool(['-add', self.path, target_ace.to_syno_str()])
         if result is None:
             raise RuntimeError(f"failed to add ACE to {self.path}")
-        logger.info(f"added {target_ace.principal_type}:{target_ace.name} to {self.path}")
+        logger.log(NOTICE, f"added {target_ace.principal_type}:{target_ace.name} to {self.path}")
         # Update local state so subsequent sync_ace calls see this ACE
         added_ace = Ace(target_ace.principal_type, target_ace.name, target_ace.access,
                         target_ace.perms, target_ace.inherit, level=0, index=None)
@@ -215,7 +222,7 @@ class Acl:
         result = self._synoacltool(['-replace', self.path, str(index), target_ace.to_syno_str()])
         if result is None:
             raise RuntimeError(f"failed to replace ACE at index {index} for {self.path}")
-        logger.info(f"updated {target_ace.principal_type}:{target_ace.name} on {self.path}")
+        logger.log(NOTICE, f"updated {target_ace.principal_type}:{target_ace.name} on {self.path}")
 
     def _del_ace(self, index: str) -> None:
         """Delete ACE at index. Raises RuntimeError on failure."""

@@ -4,6 +4,7 @@ import yaml
 import re
 import argparse
 import fcntl
+from log import NOTICE
 from synoacl import Acl, Ace, check_synoacltool
 
 LOCK_FILE_NAME = ".ensure-project-acl.lock"
@@ -12,7 +13,7 @@ EXCLUDED_DIRS = {"@eaDir", "#recycle", "#snapshot"}
 logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
     format='%(asctime)s [%(levelname)s] %(message)s',
-    level=logging.INFO,
+    level=NOTICE,
 )
 logger = logging.getLogger(__name__)
 
@@ -194,7 +195,7 @@ def acquire_lock(root_path):
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
         lock_file.write(f"{os.getpid()}\n")
         lock_file.flush()
-        logger.info(f"acquired lock: {lock_path}")
+        logger.debug(f"acquired lock: {lock_path}")
         return lock_file, lock_path
     except BlockingIOError:
         logger.error(f"another instance is already running (lock file: {lock_path})")
@@ -229,7 +230,7 @@ def main():
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
     if args.debug:
-        logger.setLevel(logging.DEBUG)
+        logging.getLogger().setLevel(logging.DEBUG)
     if not os.path.isdir(args.root):
         logger.error(f"search root is not a directory: {args.root}")
         return 1
