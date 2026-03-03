@@ -169,10 +169,8 @@ def apply_rules_to_path(path, name, rules, stats):
                         )
                         changed = target_acl.sync_ace(target_ace)
                         if changed:
-                            logger.info(f"[rule \"{rule_name}\"] applied change OK to {path}")
                             stats["rules_applied"] += 1
                         else:
-                            logger.debug(f"[rule \"{rule_name}\"] no change needed for {path}")
                             stats["rules_no_change_needed"] += 1
                     except Exception as e:
                         logger.error(f"[rule \"{rule_name}\"] failed to apply ACE to {path}: {type(e).__name__}: {e}")

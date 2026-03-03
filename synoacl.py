@@ -165,8 +165,8 @@ class Acl:
         self.loaded = True
         return True
 
-    def sync_ace(self, target_ace) -> bool:
-        """Sync ACE to match target. Returns True if changed, False if no change needed.
+    def sync_ace(self, target_ace):
+        """Sync ACE to match target. Returns True if changed, False if no change.
         Raises RuntimeError on failure."""
         all_explicit = [e for e in self.entries if e.name == target_ace.name 
                         and e.principal_type == target_ace.principal_type and e.level == 0]
@@ -187,36 +187,39 @@ class Acl:
                 logger.warning(f"ACE disappeared after cleanup, re-adding for {self.path}")
                 self._add_ace(target_ace)
                 return True
+            # Also check if remaining ACE needs update after cleanup
+            primary = all_explicit[0]
+            if primary.perms != target_ace.perms or primary.inherit != target_ace.inherit or primary.access != target_ace.access:
+                self._replace_ace(primary.index, target_ace)
+            return True
         primary = all_explicit[0]
         if primary.perms != target_ace.perms or primary.inherit != target_ace.inherit or primary.access != target_ace.access:
             self._replace_ace(primary.index, target_ace)
             return True
-        else:
-            logger.debug(f"no changes needed for {self.path} -> {target_ace.to_syno_str()}")
-            return False
+        logger.debug(f"no change needed: {target_ace.principal_type}:{target_ace.name} on {self.path}")
+        return False
 
     def _add_ace(self, target_ace) -> None:
         """Add ACE. Raises RuntimeError on failure."""
-        logger.info(f"correction: {self.path} -> add {target_ace.to_syno_str()}")
         result = self._synoacltool(['-add', self.path, target_ace.to_syno_str()])
         if result is None:
             raise RuntimeError(f"failed to add ACE to {self.path}")
+        logger.info(f"added {target_ace.principal_type}:{target_ace.name} to {self.path}")
         # Update local state so subsequent sync_ace calls see this ACE
-        # Note: index is unknown here, but we only check name/principal_type/level in sync_ace
         added_ace = Ace(target_ace.principal_type, target_ace.name, target_ace.access,
                         target_ace.perms, target_ace.inherit, level=0, index=None)
         self.entries.append(added_ace)
 
     def _replace_ace(self, index: str, target_ace) -> None:
         """Replace ACE at index. Raises RuntimeError on failure."""
-        logger.info(f"correction: {self.path} -> replace index {index} with {target_ace.to_syno_str()}")
         result = self._synoacltool(['-replace', self.path, str(index), target_ace.to_syno_str()])
         if result is None:
             raise RuntimeError(f"failed to replace ACE at index {index} for {self.path}")
+        logger.info(f"updated {target_ace.principal_type}:{target_ace.name} on {self.path}")
 
     def _del_ace(self, index: str) -> None:
         """Delete ACE at index. Raises RuntimeError on failure."""
-        logger.info(f"correction: {self.path} -> delete redundant index {index}")
+        logger.debug(f"correction: {self.path} -> delete redundant index {index}")
         result = self._synoacltool(['-del', self.path, str(index)])
         if result is None:
             raise RuntimeError(f"failed to delete ACE at index {index} for {self.path}")
