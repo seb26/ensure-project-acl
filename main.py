@@ -7,7 +7,7 @@ import fcntl
 from synoacl import Acl, Ace, check_synoacltool
 
 LOCK_FILE_NAME = ".ensure-project-acl.lock"
-EXCLUDED_DIRS = {"@eaDir"}
+EXCLUDED_DIRS = {"@eaDir", "#recycle", "#snapshot"}
 
 logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
