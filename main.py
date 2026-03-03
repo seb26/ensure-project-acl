@@ -238,15 +238,15 @@ def main():
     if not lock_file:
         return 1
     try:
-        return _run_policy(args)
+        return _run_policy(args.policy, args.root)
     finally:
         release_lock(lock_file, lock_path)
 
-def _run_policy(args):
+def _run_policy(policy_path, root):
     """Main processing logic, called after lock is acquired."""
     if not check_synoacltool():
         return 1
-    policy = parse_policy(args.policy)
+    policy = parse_policy(policy_path)
     if not policy:
         logger.error(f"aborting due to policy validation fail")
         return 1
@@ -268,9 +268,9 @@ def _run_policy(args):
         if not marker_name:
             logger.warning(f"schema rule {schema_count} has no marker_file.name, skipping")
             continue
-        logger.info(f"scanning {args.root} for marker: {marker_name}")
+        logger.info(f"scanning {root} for marker: {marker_name}")
         projects_found = 0
-        for dirpath, dirnames, filenames in os.walk(args.root, followlinks=False, onerror=lambda e: logger.warning(f"cannot access directory: {e}")):
+        for dirpath, dirnames, filenames in os.walk(root, followlinks=False, onerror=lambda e: logger.warning(f"cannot access directory: {e}")):
             dirnames[:] = [d for d in dirnames if d not in EXCLUDED_DIRS]
             if marker_name in filenames:
                 projects_found += 1
