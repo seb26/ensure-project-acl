@@ -47,11 +47,25 @@ def validate_policy(policy):
             pattern = rule.get("pattern")
             if not pattern:
                 errors.append(f"{rule_prefix}: missing 'pattern'")
-            else:
+            elif isinstance(pattern, str):
                 try:
                     re.compile(pattern)
                 except re.error as e:
                     errors.append(f"{rule_prefix}: invalid regex pattern '{pattern}': {e}")
+            elif isinstance(pattern, list):
+                for k, p in enumerate(pattern, 1):
+                    if not isinstance(p, str):
+                        errors.append(f"{rule_prefix}.pattern[{k}]: must be a string")
+                    else:
+                        try:
+                            re.compile(p)
+                        except re.error as e:
+                            errors.append(f"{rule_prefix}.pattern[{k}]: invalid regex '{p}': {e}")
+            else:
+                errors.append(f"{rule_prefix}: 'pattern' must be a string or list of strings")
+            pattern_mode = rule.get("pattern_mode", "any")
+            if pattern_mode not in ("any", "all"):
+                errors.append(f"{rule_prefix}: 'pattern_mode' must be 'any' or 'all'")
             acl_cfg = rule.get("ensure_acl")
             if not acl_cfg:
                 errors.append(f"{rule_prefix}: missing 'ensure_acl'")
@@ -119,18 +133,28 @@ def process_project(project_path, rules, stats):
         logger.error(f"unexpected error in project processing {project_path}: {type(e).__name__}: {e}")
         stats["directories_failed"] += 1
 
+def pattern_matches(pattern, pattern_mode, name):
+    """Check if name matches pattern(s). Returns True if matched."""
+    if isinstance(pattern, str):
+        return bool(re.search(pattern, name, re.IGNORECASE))
+    patterns = pattern
+    if pattern_mode == "all":
+        return all(re.search(p, name, re.IGNORECASE) for p in patterns)
+    return any(re.search(p, name, re.IGNORECASE) for p in patterns)
+
 def apply_rules_to_path(path, name, rules, stats):
     """Apply rules to a single path, return count of rule matches."""
     matches = 0
     for rule in rules:
         pattern = rule.get("pattern")
-        logger.debug(f"pattern: {pattern}")
+        pattern_mode = rule.get("pattern_mode", "any")
+        logger.debug(f"pattern: {pattern} (mode: {pattern_mode})")
         config = rule.get("ensure_acl")
         if not pattern or not config:
             continue
-        if re.search(pattern, name, re.IGNORECASE):
+        if pattern_matches(pattern, pattern_mode, name):
             rule_name = rule.get('name', 'unknown')
-            logger.info(f"[rule \"{rule_name}\"] matches on: {name}")
+            logger.debug(f"[rule \"{rule_name}\"] matches on: {name}")
             matches += 1
             try:
                 target_acl = Acl(path)
