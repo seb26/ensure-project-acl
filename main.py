@@ -3,12 +3,11 @@ import os
 import yaml
 import re
 import argparse
-import subprocess
 import fcntl
-from pathlib import Path
 from synoacl import Acl, Ace
 
 LOCK_FILE_NAME = ".ensure-project-acl.lock"
+EXCLUDED_DIRS = {"@eaDir"}
 
 logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -96,7 +95,7 @@ def process_project(project_path, rules, stats):
             return
         matches_found = 0
         for result in os.scandir(project_path):
-            if not result.is_dir() or result.name == "@eaDir":
+            if result.is_symlink() or not result.is_dir() or result.name in EXCLUDED_DIRS:
                 continue
             try:
                 logger.debug(f"{result.name}: evaluating...")
@@ -244,36 +243,23 @@ def _run_policy(args):
         if not marker_name:
             logger.warning(f"schema rule {schema_count} has no marker_file.name, skipping")
             continue
-        try:
-            logger.info(f"scanning {args.root} for marker: {marker_name}")
-            markers = subprocess.check_output(
-                ["find", args.root, "-name", marker_name, "-type", "f"],
-                text=True,
-                timeout=300  # 5 minute timeout for find
-            ).splitlines()
-            if not markers:
-                logger.info(f"no projects found with marker: {marker_name}")
-                continue
-            logger.info(f"found {len(markers)} projects with marker: {marker_name}")
-            stats["projects_found"] += len(markers)
-            for m in markers:
+        logger.info(f"scanning {args.root} for marker: {marker_name}")
+        projects_found = 0
+        for dirpath, dirnames, filenames in os.walk(args.root, followlinks=False, onerror=lambda e: logger.warning(f"cannot access directory: {e}")):
+            dirnames[:] = [d for d in dirnames if d not in EXCLUDED_DIRS]
+            if marker_name in filenames:
+                projects_found += 1
+                stats["projects_found"] += 1
                 try:
-                    project_root = os.path.dirname(m)
-                    logger.info(f"Processing project: {project_root}")
-                    process_project(project_root, schema.get("rules", []), stats)
+                    logger.info(f"processing project: {dirpath}")
+                    process_project(dirpath, schema.get("rules", []), stats)
                 except Exception as e:
-                    logger.error(f"failed to process project at {m}: {type(e).__name__}: {e}")
+                    logger.error(f"failed to process project at {dirpath}: {type(e).__name__}: {e}")
                     stats["projects_failed"] += 1
-                    continue
-        except subprocess.TimeoutExpired:
-            logger.error(f"find command timeout searching for marker {marker_name}")
-            continue
-        except subprocess.CalledProcessError as e:
-            logger.error(f"find command failed for marker {marker_name}: {e}")
-            continue
-        except Exception as e:
-            logger.error(f"unexpected error processing marker {marker_name}: {type(e).__name__}: {e}")
-            continue
+        if projects_found == 0:
+            logger.info(f"no projects found with marker: {marker_name}")
+        else:
+            logger.info(f"found {projects_found} projects with marker: {marker_name}")
     logger.info("=" * 60)
     logger.info("Processing Summary:")
     logger.info(f"  Projects found:         {stats['projects_found']}")
