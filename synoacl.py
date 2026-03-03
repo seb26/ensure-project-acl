@@ -83,7 +83,7 @@ class Acl:
         self.path = path
         self.entries = []
         self.loaded = False
-        self.ace_pattern = re.compile(r"^\s*\[(\d+)\]\s+(user|group|owner|everyone|authenticated_user|system):(.+):(allow|deny):([rwxpdDaARWcCo-]+):([fdin-]+)\s+\(level:(\d+)\)")
+        self.ace_pattern = re.compile(r"^\s*\[(\d+)\]\s+(user|group|owner|everyone|authenticated_user|system):(.*?):(allow|deny):([rwxpdDaARWcCo-]+):([fdin-]+)\s+\(level:(\d+)\)")
         if not self.load():
             raise RuntimeError(f"failed to load ACL for {path}")
 
