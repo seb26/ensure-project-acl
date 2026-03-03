@@ -282,7 +282,7 @@ def _run_policy(args):
                     logger.error(f"failed to process project at {dirpath}: {type(e).__name__}: {e}")
                     stats["projects_failed"] += 1
         if projects_found == 0:
-            logger.info(f"no projects found with marker: {marker_name}")
+            logger.warning(f"0 projects found with marker '{marker_name}' in root {root}")
         else:
             logger.info(f"found {projects_found} projects with marker: {marker_name}")
     logger.info("=" * 60)
