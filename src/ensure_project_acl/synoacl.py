@@ -33,11 +33,18 @@ SYNOLOGY_PERMISSION_BITS = {
     "o": "Take ownership",
 }
 
-SYNOLOGY_INHERIT_BITS = {
+# Direct mapping: bit is SET when UI checkbox is checked
+SYNOLOGY_INHERIT_DIRECT = {
     "f": "Child files",
     "d": "Child folders",
-    "i": "Inherit only",
-    "n": "No propagate",
+}
+
+# Inverted mapping: bit is CLEAR when UI checkbox is checked
+# "This folder" checked → i=0 (i=1 means inherit-only, skip this folder)
+# "All descendants" checked → n=0 (n=1 means no-propagate, stop at children)
+SYNOLOGY_INHERIT_INVERTED = {
+    "i": "This folder",
+    "n": "All descendants",
 }
 
 
@@ -51,9 +58,7 @@ class Ace:
         self.level = int(level)
         self.index = index
         self.perms = rights if isinstance(rights, str) else self._build_mask(rights)
-        self.inherit = (
-            apply_to if isinstance(apply_to, str) else self._build_inherit(apply_to)
-        )
+        self.inherit = self._build_inherit(apply_to)
 
     def _build_mask(self, requested):
         """Convert human-readable permission labels to synoacltool permission string."""
@@ -64,15 +69,31 @@ class Ace:
         return mask
 
     def _build_inherit(self, apply_to):
-        """Convert human-readable inheritance labels to synoacltool inherit string."""
-        if "All descendants" in apply_to:
-            bits = {"f", "d"}
+        """Convert boolean dict to synoacltool inherit string.
+
+        apply_to keys:
+          - this_folder (inverted: True → i=0)
+          - child_files (direct: True → f)
+          - child_folders (direct: True → d)
+          - all_descendants (inverted: True → n=0)
+        """
+        required_keys = [
+            "this_folder",
+            "child_files",
+            "child_folders",
+            "all_descendants",
+        ]
+        if not isinstance(apply_to, dict):
+            apply_to = {k: True for k in required_keys}
         else:
-            label_to_bit = {label: bit for bit, label in SYNOLOGY_INHERIT_BITS.items()}
-            bits = {label_to_bit[label] for label in apply_to if label in label_to_bit}
+            for k in required_keys:
+                v = apply_to.get(k, True)
+                apply_to[k] = True if v is True else False if v is False else bool(v)
         mask = ""
-        for bit in "fdin":
-            mask += bit if bit in bits else "-"
+        mask += "f" if apply_to.get("child_files") else "-"
+        mask += "d" if apply_to.get("child_folders") else "-"
+        mask += "-" if apply_to.get("this_folder") else "i"
+        mask += "-" if apply_to.get("all_descendants") else "n"
         return mask
 
     def __eq__(self, other):

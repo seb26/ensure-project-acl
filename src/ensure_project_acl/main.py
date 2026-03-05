@@ -95,8 +95,28 @@ def validate_policy(policy):
             elif isinstance(acl_cfg, dict):
                 if not acl_cfg.get("rights"):
                     errors.append(f"{rule_prefix}: missing 'ensure_acl.rights'")
-                if not acl_cfg.get("apply_to"):
-                    errors.append(f"{rule_prefix}: missing 'ensure_acl.apply_to'")
+                apply_to = acl_cfg.get("apply_to")
+                required_keys = [
+                    "this_folder",
+                    "child_files",
+                    "child_folders",
+                    "all_descendants",
+                ]
+                if apply_to is None:
+                    # Set default: all true
+                    acl_cfg["apply_to"] = {k: True for k in required_keys}
+                elif not isinstance(apply_to, dict):
+                    errors.append(
+                        f"{rule_prefix}: 'ensure_acl.apply_to' must be a dict of booleans"
+                    )
+                else:
+                    for k in required_keys:
+                        if k not in apply_to:
+                            apply_to[k] = True
+                        elif not isinstance(apply_to[k], bool):
+                            errors.append(
+                                f"{rule_prefix}: 'ensure_acl.apply_to.{k}' must be boolean"
+                            )
                 if not acl_cfg.get("objects"):
                     errors.append(f"{rule_prefix}: missing 'ensure_acl.objects'")
     return errors
@@ -182,6 +202,12 @@ def pattern_matches(pattern, pattern_mode, name):
 def apply_rules_to_path(path, name, rules, stats):
     """Apply rules to a single path, return count of rule matches."""
     matches = 0
+    required_keys = [
+        "this_folder",
+        "child_files",
+        "child_folders",
+        "all_descendants",
+    ]
     for rule in rules:
         pattern = rule.get("pattern")
         pattern_mode = rule.get("pattern_mode", "any")
@@ -195,6 +221,13 @@ def apply_rules_to_path(path, name, rules, stats):
             matches += 1
             try:
                 target_acl = Acl(path)
+                raw_apply_to = config.get("apply_to")
+                if isinstance(raw_apply_to, dict):
+                    apply_to = {
+                        k: bool(raw_apply_to.get(k, True)) for k in required_keys
+                    }
+                else:
+                    apply_to = {k: True for k in required_keys}
                 for subject in config.get("objects", []):
                     try:
                         target_ace = Ace(
@@ -202,7 +235,7 @@ def apply_rules_to_path(path, name, rules, stats):
                             name=subject,
                             access=config.get("type", "allow"),
                             rights=config["rights"],
-                            apply_to=config["apply_to"],
+                            apply_to=apply_to,
                         )
                         changed = target_acl.sync_ace(target_ace)
                         if changed:
@@ -215,7 +248,6 @@ def apply_rules_to_path(path, name, rules, stats):
                         )
                         stats["rules_failed"] += 1
                         continue
-
             except Exception as e:
                 logger.error(
                     f'[rule "{rule_name}"] failed to load/sync ACL for {path}: {type(e).__name__}: {e}'
