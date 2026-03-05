@@ -1,11 +1,12 @@
-import logging
-import os
-import yaml
-import re
-import argparse
-import fcntl
 from log import NOTICE
 from synoacl import Acl, Ace, check_synoacltool
+import argparse
+import fcntl
+import logging
+import os
+import re
+import sys
+import yaml
 
 LOCK_FILE_NAME = ".ensure-project-acl.lock"
 EXCLUDED_DIRS = {"@eaDir", "#recycle", "#snapshot"}
@@ -16,6 +17,21 @@ logging.basicConfig(
     level=NOTICE,
 )
 logger = logging.getLogger(__name__)
+
+from importlib.metadata import version, PackageNotFoundError
+from pathlib import Path
+import tomllib
+
+def get_version():
+    try:
+        return version("ensure-project-acl")
+    except PackageNotFoundError:
+        try:
+            pyproject = Path(__file__).parent / "pyproject.toml"
+            with open(pyproject, "rb") as f:
+                return tomllib.load(f)["project"]["version"]
+        except Exception:
+            return "unknown"
 
 def validate_policy(policy):
     """Validate policy structure and return list of errors."""
@@ -224,9 +240,12 @@ def release_lock(lock_file, lock_path):
         logger.warning(f"error releasing lock: {e}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Synology ACL Policy Enforcer")
+    if sys.argv[1:] == ["--version"] or sys.argv[1:] == ["-v"]:
+        print(get_version())
+        return 1
+    parser = argparse.ArgumentParser(description="sets ACLs on desired directories according to a policy file (yaml)")
     parser.add_argument("--policy", required=True, help="Path to policy.yaml")
-    parser.add_argument("--root", required=True, help="Search root directory (e.g. /volume1/PROJECTS)")
+    parser.add_argument("--root", required=True, help="Root directory (e.g. /volume1/PROJECTS)")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
     if args.debug:
