@@ -10,3 +10,11 @@ dependencies = [
 dev = [
     "debugpy>=1.8.20",
 ]
+
+[tool.ruff.lint]
+select = ["E"]
+
+[tool.ruff.lint.pycodestyle]
+# E302: Expected 2 blank lines between functions
+# E303: Too many blank lines (prevents extra lines inside functions)
+max-doc-length = 88

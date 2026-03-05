@@ -15,10 +15,11 @@ EXCLUDED_DIRS = {"@eaDir", "#recycle", "#snapshot"}
 
 logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
-    format='%(asctime)s [%(levelname)s] %(message)s',
+    format="%(asctime)s [%(levelname)s] %(message)s",
     level=NOTICE,
 )
 logger = logging.getLogger(__name__)
+
 
 def get_version():
     try:
@@ -30,6 +31,7 @@ def get_version():
                 return tomllib.load(f)["project"]["version"]
         except Exception:
             return "unknown"
+
 
 def validate_policy(policy):
     """Validate policy structure and return list of errors."""
@@ -66,7 +68,9 @@ def validate_policy(policy):
                 try:
                     re.compile(pattern)
                 except re.error as e:
-                    errors.append(f"{rule_prefix}: invalid regex pattern '{pattern}': {e}")
+                    errors.append(
+                        f"{rule_prefix}: invalid regex pattern '{pattern}': {e}"
+                    )
             elif isinstance(pattern, list):
                 for k, p in enumerate(pattern, 1):
                     if not isinstance(p, str):
@@ -75,9 +79,13 @@ def validate_policy(policy):
                         try:
                             re.compile(p)
                         except re.error as e:
-                            errors.append(f"{rule_prefix}.pattern[{k}]: invalid regex '{p}': {e}")
+                            errors.append(
+                                f"{rule_prefix}.pattern[{k}]: invalid regex '{p}': {e}"
+                            )
             else:
-                errors.append(f"{rule_prefix}: 'pattern' must be a string or list of strings")
+                errors.append(
+                    f"{rule_prefix}: 'pattern' must be a string or list of strings"
+                )
             pattern_mode = rule.get("pattern_mode", "any")
             if pattern_mode not in ("any", "all"):
                 errors.append(f"{rule_prefix}: 'pattern_mode' must be 'any' or 'all'")
@@ -92,6 +100,7 @@ def validate_policy(policy):
                 if not acl_cfg.get("objects"):
                     errors.append(f"{rule_prefix}: missing 'ensure_acl.objects'")
     return errors
+
 
 def parse_policy(policy_path):
     """Load and validate policy file, returning None on failure."""
@@ -115,6 +124,7 @@ def parse_policy(policy_path):
         return None
     return policy
 
+
 def process_project(project_path, rules, stats):
     """Process ACL rules for a project, continuing on errors."""
     try:
@@ -124,17 +134,25 @@ def process_project(project_path, rules, stats):
             return
         matches_found = 0
         for result in os.scandir(project_path):
-            if result.is_symlink() or not result.is_dir() or result.name in EXCLUDED_DIRS:
+            if (
+                result.is_symlink()
+                or not result.is_dir()
+                or result.name in EXCLUDED_DIRS
+            ):
                 continue
             try:
                 logger.debug(f"{result.name}: evaluating...")
-                matches_found += apply_rules_to_path(result.path, result.name, rules, stats)
+                matches_found += apply_rules_to_path(
+                    result.path, result.name, rules, stats
+                )
             except OSError as e:
                 logger.error(f"cannot access {result.path}: {e}")
                 stats["directories_failed"] += 1
                 continue
             except Exception as e:
-                logger.error(f"unexpected error processing {result.path}: {type(e).__name__}: {e}")
+                logger.error(
+                    f"unexpected error processing {result.path}: {type(e).__name__}: {e}"
+                )
                 stats["directories_failed"] += 1
                 continue
         if matches_found > 0:
@@ -145,8 +163,11 @@ def process_project(project_path, rules, stats):
         logger.error(f"cannot scan project directory {project_path}: {e}")
         stats["directories_failed"] += 1
     except Exception as e:
-        logger.error(f"unexpected error in project processing {project_path}: {type(e).__name__}: {e}")
+        logger.error(
+            f"unexpected error in project processing {project_path}: {type(e).__name__}: {e}"
+        )
         stats["directories_failed"] += 1
+
 
 def pattern_matches(pattern, pattern_mode, name):
     """Check if name matches pattern(s). Returns True if matched."""
@@ -156,6 +177,7 @@ def pattern_matches(pattern, pattern_mode, name):
     if pattern_mode == "all":
         return all(re.search(p, name, re.IGNORECASE) for p in patterns)
     return any(re.search(p, name, re.IGNORECASE) for p in patterns)
+
 
 def apply_rules_to_path(path, name, rules, stats):
     """Apply rules to a single path, return count of rule matches."""
@@ -168,19 +190,19 @@ def apply_rules_to_path(path, name, rules, stats):
         if not pattern or not config:
             continue
         if pattern_matches(pattern, pattern_mode, name):
-            rule_name = rule.get('name', 'unknown')
-            logger.debug(f"[rule \"{rule_name}\"] matches on: {name}")
+            rule_name = rule.get("name", "unknown")
+            logger.debug(f'[rule "{rule_name}"] matches on: {name}')
             matches += 1
             try:
                 target_acl = Acl(path)
-                for subject in config.get('objects', []):
+                for subject in config.get("objects", []):
                     try:
                         target_ace = Ace(
-                            principal_type=config.get('principal_type', 'group'),
+                            principal_type=config.get("principal_type", "group"),
                             name=subject,
-                            access=config.get('type', 'allow'),
-                            rights=config['rights'],
-                            apply_to=config['apply_to']
+                            access=config.get("type", "allow"),
+                            rights=config["rights"],
+                            apply_to=config["apply_to"],
                         )
                         changed = target_acl.sync_ace(target_ace)
                         if changed:
@@ -188,24 +210,31 @@ def apply_rules_to_path(path, name, rules, stats):
                         else:
                             stats["rules_no_change_needed"] += 1
                     except Exception as e:
-                        logger.error(f"[rule \"{rule_name}\"] failed to apply ACE to {path}: {type(e).__name__}: {e}")
+                        logger.error(
+                            f'[rule "{rule_name}"] failed to apply ACE to {path}: {type(e).__name__}: {e}'
+                        )
                         stats["rules_failed"] += 1
                         continue
 
             except Exception as e:
-                logger.error(f"[rule \"{rule_name}\"] failed to load/sync ACL for {path}: {type(e).__name__}: {e}")
+                logger.error(
+                    f'[rule "{rule_name}"] failed to load/sync ACL for {path}: {type(e).__name__}: {e}'
+                )
                 stats["rules_failed"] += 1
                 continue
         else:
-            logger.debug(f"[rule \"{rule.get('name')}\"] no match for pattern {pattern} on: {name}")
+            logger.debug(
+                f'[rule "{rule.get("name")}"] no match for pattern {pattern} on: {name}'
+            )
     return matches
+
 
 def acquire_lock(root_path):
     """Acquire exclusive lock, returns (file_handle, lock_path) or (None, None)."""
     lock_path = os.path.join(root_path, LOCK_FILE_NAME)
     lock_file = None
     try:
-        lock_file = open(lock_path, 'w')
+        lock_file = open(lock_path, "w")
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
         lock_file.write(f"{os.getpid()}\n")
         lock_file.flush()
@@ -222,6 +251,7 @@ def acquire_lock(root_path):
             lock_file.close()
         return None, None
 
+
 def release_lock(lock_file, lock_path):
     """Delete lock file, release lock, and close handle."""
     if not lock_file:
@@ -236,6 +266,7 @@ def release_lock(lock_file, lock_path):
         lock_file.close()
     except Exception as e:
         logger.warning(f"error releasing lock: {e}")
+
 
 def run_policy(policy_path, root):
     """Main processing logic, called after lock is acquired."""
@@ -261,11 +292,17 @@ def run_policy(policy_path, root):
         marker_cfg = criteria.get("marker_file", {})
         marker_name = marker_cfg.get("name")
         if not marker_name:
-            logger.warning(f"schema rule {schema_count} has no marker_file.name, skipping")
+            logger.warning(
+                f"schema rule {schema_count} has no marker_file.name, skipping"
+            )
             continue
         logger.info(f"scanning {root} for marker: {marker_name}")
         projects_found = 0
-        for dirpath, dirnames, filenames in os.walk(root, followlinks=False, onerror=lambda e: logger.warning(f"cannot access directory: {e}")):
+        for dirpath, dirnames, filenames in os.walk(
+            root,
+            followlinks=False,
+            onerror=lambda e: logger.warning(f"cannot access directory: {e}"),
+        ):
             dirnames[:] = [d for d in dirnames if d not in EXCLUDED_DIRS]
             if marker_name in filenames:
                 projects_found += 1
@@ -274,10 +311,14 @@ def run_policy(policy_path, root):
                     logger.info(f"processing project: {dirpath}")
                     process_project(dirpath, schema.get("rules", []), stats)
                 except Exception as e:
-                    logger.error(f"failed to process project at {dirpath}: {type(e).__name__}: {e}")
+                    logger.error(
+                        f"failed to process project at {dirpath}: {type(e).__name__}: {e}"
+                    )
                     stats["projects_failed"] += 1
         if projects_found == 0:
-            logger.warning(f"0 projects found with marker '{marker_name}' in root {root}")
+            logger.warning(
+                f"0 projects found with marker '{marker_name}' in root {root}"
+            )
         else:
             logger.info(f"found {projects_found} projects with marker: {marker_name}")
     logger.info("=" * 60)
@@ -290,19 +331,26 @@ def run_policy(policy_path, root):
     logger.info(f"  Rules no change needed: {stats['rules_no_change_needed']}")
     logger.info(f"  Rules failed:           {stats['rules_failed']}")
     logger.info("=" * 60)
-    failures = stats['projects_failed'] + stats['directories_failed'] + stats['rules_failed']
+    failures = (
+        stats["projects_failed"] + stats["directories_failed"] + stats["rules_failed"]
+    )
     if failures > 0:
         logger.warning("some operations failed - check logs above for details")
         return 1
     return 0
 
+
 def main():
     if sys.argv[1:] == ["--version"] or sys.argv[1:] == ["-v"]:
         print(get_version())
         return 1
-    parser = argparse.ArgumentParser(description="sets ACLs on desired directories according to a policy file (yaml)")
+    parser = argparse.ArgumentParser(
+        description="sets ACLs on desired directories according to a policy file (yaml)"
+    )
     parser.add_argument("--policy", required=True, help="Path to policy.yaml")
-    parser.add_argument("--root", required=True, help="Root directory (e.g. /volume1/PROJECTS)")
+    parser.add_argument(
+        "--root", required=True, help="Root directory (e.g. /volume1/PROJECTS)"
+    )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
     if args.debug:
@@ -318,5 +366,6 @@ def main():
     finally:
         release_lock(lock_file, lock_path)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     exit(main())
