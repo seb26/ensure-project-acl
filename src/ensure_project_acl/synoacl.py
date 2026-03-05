@@ -1,10 +1,10 @@
+from .log import NOTICE
+import logging
 import os
 import re
+import shutil
 import stat
 import subprocess
-import shutil
-import logging
-from log import NOTICE
 
 logger = logging.getLogger(__name__)
 

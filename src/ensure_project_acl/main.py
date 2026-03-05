@@ -1,6 +1,6 @@
+from .log import NOTICE
+from .synoacl import Acl, Ace, check_synoacltool
 from importlib.metadata import version, PackageNotFoundError
-from log import NOTICE
-from synoacl import Acl, Ace, check_synoacltool
 import argparse
 import fcntl
 import logging
@@ -343,7 +343,7 @@ def run_policy(policy_path, root):
 def main():
     if sys.argv[1:] == ["--version"] or sys.argv[1:] == ["-v"]:
         print(get_version())
-        return 1
+        return 0
     parser = argparse.ArgumentParser(
         description="sets ACLs on desired directories according to a policy file (yaml)"
     )

@@ -11,6 +11,12 @@ dev = [
     "debugpy>=1.8.20",
 ]
 
+[project.scripts]
+ensure-project-acl = "ensure_project_acl.main:main"
+
+[tool.uv]
+package = true
+
 [tool.ruff.lint]
 select = ["E"]
 
