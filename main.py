@@ -1,3 +1,4 @@
+from importlib.metadata import version, PackageNotFoundError
 from log import NOTICE
 from synoacl import Acl, Ace, check_synoacltool
 import argparse
@@ -6,6 +7,7 @@ import logging
 import os
 import re
 import sys
+import tomllib
 import yaml
 
 LOCK_FILE_NAME = ".ensure-project-acl.lock"
@@ -18,16 +20,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from importlib.metadata import version, PackageNotFoundError
-from pathlib import Path
-import tomllib
-
 def get_version():
     try:
         return version("ensure-project-acl")
     except PackageNotFoundError:
         try:
-            pyproject = Path(__file__).parent / "pyproject.toml"
+            pyproject = os.path.join(os.path.dirname(__file__), "pyproject.toml")
             with open(pyproject, "rb") as f:
                 return tomllib.load(f)["project"]["version"]
         except Exception:
@@ -239,29 +237,7 @@ def release_lock(lock_file, lock_path):
     except Exception as e:
         logger.warning(f"error releasing lock: {e}")
 
-def main():
-    if sys.argv[1:] == ["--version"] or sys.argv[1:] == ["-v"]:
-        print(get_version())
-        return 1
-    parser = argparse.ArgumentParser(description="sets ACLs on desired directories according to a policy file (yaml)")
-    parser.add_argument("--policy", required=True, help="Path to policy.yaml")
-    parser.add_argument("--root", required=True, help="Root directory (e.g. /volume1/PROJECTS)")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    args = parser.parse_args()
-    if args.debug:
-        logging.getLogger().setLevel(logging.DEBUG)
-    if not os.path.isdir(args.root):
-        logger.error(f"search root is not a directory: {args.root}")
-        return 1
-    lock_file, lock_path = acquire_lock(args.root)
-    if not lock_file:
-        return 1
-    try:
-        return _run_policy(args.policy, args.root)
-    finally:
-        release_lock(lock_file, lock_path)
-
-def _run_policy(policy_path, root):
+def run_policy(policy_path, root):
     """Main processing logic, called after lock is acquired."""
     if not check_synoacltool():
         return 1
@@ -319,6 +295,28 @@ def _run_policy(policy_path, root):
         logger.warning("some operations failed - check logs above for details")
         return 1
     return 0
+
+def main():
+    if sys.argv[1:] == ["--version"] or sys.argv[1:] == ["-v"]:
+        print(get_version())
+        return 1
+    parser = argparse.ArgumentParser(description="sets ACLs on desired directories according to a policy file (yaml)")
+    parser.add_argument("--policy", required=True, help="Path to policy.yaml")
+    parser.add_argument("--root", required=True, help="Root directory (e.g. /volume1/PROJECTS)")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    args = parser.parse_args()
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+    if not os.path.isdir(args.root):
+        logger.error(f"search root is not a directory: {args.root}")
+        return 1
+    lock_file, lock_path = acquire_lock(args.root)
+    if not lock_file:
+        return 1
+    try:
+        return run_policy(args.policy, args.root)
+    finally:
+        release_lock(lock_file, lock_path)
 
 if __name__ == '__main__':
     exit(main())
