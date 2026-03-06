@@ -347,9 +347,7 @@ def run_policy(policy_path, root):
                     )
                     stats["projects_failed"] += 1
         if projects_found == 0:
-            logger.error(
-                f"0 projects found with marker '{marker_name}' in root {root}"
-            )
+            logger.error(f"0 projects found with marker '{marker_name}' in root {root}")
             return 1
         else:
             logger.info(f"found {projects_found} projects with marker: {marker_name}")
@@ -379,7 +377,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="sets ACLs on desired directories according to a policy file (yaml)"
     )
-    parser.add_argument("--policy", required=True, help="Path to policy.yaml")
+    parser.add_argument("--policy", default="policy.yaml", help="Path to policy.yaml")
     parser.add_argument(
         "--root", required=True, help="Root directory (e.g. /volume1/PROJECTS)"
     )
