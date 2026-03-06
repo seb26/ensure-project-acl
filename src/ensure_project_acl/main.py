@@ -32,6 +32,10 @@ def get_version():
             return "unknown"
 
 
+def is_root():
+    return os.geteuid() == 0
+
+
 def validate_policy(policy):
     """Validate policy structure and return list of errors."""
     errors = []
@@ -392,6 +396,8 @@ def main():
     if not lock_file:
         return 1
     try:
+        if not is_root():
+            logger.warning("running without root - applying ACLs may fail...")
         return run_policy(args.policy, args.root)
     finally:
         release_lock(lock_file, lock_path)
