@@ -14,8 +14,7 @@ LOCK_FILE_NAME = ".ensure-project-acl.lock"
 EXCLUDED_DIRS = {"@eaDir", "#recycle", "#snapshot"}
 
 logging.basicConfig(
-    datefmt="%Y-%m-%d %H:%M:%S",
-    format="%(asctime)s [%(levelname)s] %(message)s",
+    format="[%(levelname)s] %(message)s",
     level=NOTICE,
 )
 logger = logging.getLogger(__name__)
@@ -348,9 +347,10 @@ def run_policy(policy_path, root):
                     )
                     stats["projects_failed"] += 1
         if projects_found == 0:
-            logger.warning(
+            logger.error(
                 f"0 projects found with marker '{marker_name}' in root {root}"
             )
+            return 1
         else:
             logger.info(f"found {projects_found} projects with marker: {marker_name}")
     logger.info("=" * 60)
