@@ -1,0 +1,25 @@
+schemarules:
+  - name: "Project directory permissions"
+    selection_criteria:
+      # relevant project folders are identified by the presence of a blank marker file named "_Project.txt"
+      marker_file:
+        name: "_Project.txt"
+    rules:
+      # 'editors' group is added write access to folders matching "proxy" or "proxies"
+      - name: "PROXIES subfolder"
+        pattern: "PROX(Y|IES)?"
+        ensure_acl:
+          principal_type: "group"
+          objects: ["editors"]
+          rights:
+            - "Create files/Write data"
+            - "Create folders/Append data"
+            - "Write attributes"
+            - "Write extended attributes"
+            - "Delete subfolders and files"
+            - "Delete"
+          apply_to:
+            this_folder: true
+            child_files: true
+            child_folders: true
+            all_descendants: true
